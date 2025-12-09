@@ -5,6 +5,14 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
+    tls = {
+      source  = "hashicorp/tls"
+      version = "~> 4.0"
+    }
+    local = {
+      source  = "hashicorp/local"
+      version = "~> 2.0"
+    }
   }
 }
 
@@ -148,10 +156,16 @@ resource "aws_lb_listener" "http" {
   }
 }
 
-# Key Pair para SSH
+# Key Pair para SSH - Genera localmente
 resource "tls_private_key" "deployer" {
   algorithm = "RSA"
   rsa_bits  = 4096
+}
+
+# Guardar la private key localmente (sensible)
+resource "local_sensitive_file" "private_key" {
+  filename = "${path.module}/deployer_key.pem"
+  content  = tls_private_key.deployer.private_key_pem
 }
 
 resource "aws_key_pair" "deployer" {
@@ -228,6 +242,34 @@ resource "aws_autoscaling_group" "app" {
     key                 = "Name"
     value               = "terraform-asg-instance"
     propagate_at_launch = true
+  }
+}
+
+# Auto Scaling Policy - CPU
+resource "aws_autoscaling_policy" "cpu_scaling" {
+  name                   = "terraform-asg-cpu-policy"
+  policy_type            = "TargetTrackingScaling"
+  autoscaling_group_name = aws_autoscaling_group.app.name
+
+  target_tracking_configuration {
+    predefined_metric_specification {
+      predefined_metric_type = "ASGAverageCPUUtilization"
+    }
+    target_value = 70.0
+  }
+}
+
+# Auto Scaling Policy - Memory (usando custom metric)
+resource "aws_autoscaling_policy" "memory_scaling" {
+  name                   = "terraform-asg-memory-policy"
+  policy_type            = "TargetTrackingScaling"
+  autoscaling_group_name = aws_autoscaling_group.app.name
+
+  target_tracking_configuration {
+    predefined_metric_specification {
+      predefined_metric_type = "ASGAverageNetworkIn"
+    }
+    target_value = 1000000.0  # 1 MB/s
   }
 }
 
