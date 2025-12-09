@@ -115,20 +115,20 @@ resource "aws_security_group" "instances" {
 
 # Application Load Balancer
 resource "aws_lb" "app" {
-  name               = "terraform-asg-example"
+  name               = "terraform-asg"
   internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb.id]
   subnets            = data.aws_subnets.default.ids
 
   tags = {
-    Name = "terraform-asg-example"
+    Name = "terraform-asg"
   }
 }
 
 # Target Group
 resource "aws_lb_target_group" "instances" {
-  name     = "terraform-asg-example"
+  name     = "terraform-asg"
   port     = 80
   protocol = "HTTP"
   vpc_id   = data.aws_vpc.default.id
@@ -219,9 +219,9 @@ resource "aws_launch_template" "app" {
 
 # Auto Scaling Group
 resource "aws_autoscaling_group" "app" {
-  name                    = "terraform-asg-example"
-  min_size                = 1
-  max_size                = 3
+  name                    = "terraform-asg"
+  min_size                = 2
+  max_size                = 7
   desired_capacity        = 2
   vpc_zone_identifier     = data.aws_subnets.default.ids
   target_group_arns       = [aws_lb_target_group.instances.arn]
