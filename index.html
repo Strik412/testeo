@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Hello World</title>
+</head>
+<body>
+  <h1>Hello World from Docker</h1>
+  <p>Hostname: <span id="host"></span></p>
+
+  <script>
+    fetch('/hostname')
+      .then(r => r.text())
+      .then(t => document.getElementById('host').innerText = t)
+  </script>
+</body>
+</html>

@@ -1,0 +1,154 @@
+name: Deploy Docker to EC2 Instances
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'dockerfile'
+      - 'index.html'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch:
+    inputs:
+      docker_tag:
+        description: 'Docker image tag'
+        required: true
+        default: 'latest'
+
+env:
+  DOCKER_REGISTRY: docker.io
+  IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/hello-world1
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,suffix=-{{date 'YYYYMMDD'}}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./dockerfile
+          push: true
+          tags: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          cache-from: type=registry,ref=${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
+          cache-to: type=registry,ref=${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
+
+  deploy-to-instances:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deployer_key
+          chmod 600 ~/.ssh/deployer_key
+
+      - name: Deploy Docker image to instances
+        env:
+          DOCKER_IMAGE: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          SSH_KEY: ~/.ssh/deployer_key
+          SSH_USER: ec2-user
+          INSTANCE_IPS: ${{ secrets.INSTANCE_IPS }}
+        run: |
+          echo "🚀 Deploying $DOCKER_IMAGE to instances"
+          
+          IFS=' ' read -ra INSTANCES <<< "$INSTANCE_IPS"
+          for instance_ip in "${INSTANCES[@]}"; do
+            echo "📦 Deploying to $instance_ip..."
+            
+            ssh -i $SSH_KEY -o StrictHostKeyChecking=no -o ConnectTimeout=30 $SSH_USER@$instance_ip << 'EOSSH'
+          # Wait for Docker to be ready (max 2 minutes)
+          echo "Waiting for Docker daemon..."
+          for i in {1..24}; do
+            if docker --version &> /dev/null; then
+              echo "Docker is ready"
+              break
+            fi
+            echo "Attempt $i: Waiting..."
+            sleep 5
+          done
+          
+          echo "Pulling Docker image..."
+          docker pull $DOCKER_IMAGE
+          
+          echo "Stopping old container..."
+          docker rm -f app || true
+          
+          echo "Starting new container..."
+          docker run -d --name app -p 80:80 $DOCKER_IMAGE
+          
+          echo "✅ Deployment completed"
+          EOSSH
+            
+            if [ $? -eq 0 ]; then
+              echo "✅ Successfully deployed to $instance_ip"
+            else
+              echo "❌ Failed to deploy to $instance_ip"
+              exit 1
+            fi
+          done
+
+  verify-deployment:
+    needs: deploy-to-instances
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Wait for containers to start
+        run: sleep 15
+
+      - name: Verify deployment
+        env:
+          ALB_DNS: ${{ secrets.ALB_DNS }}
+        run: |
+          echo "Testing application at http://$ALB_DNS"
+          
+          for i in {1..30}; do
+            if curl -f http://$ALB_DNS/ > /dev/null 2>&1; then
+              echo "✅ Application is responding"
+              curl -s http://$ALB_DNS/ | head -20
+              exit 0
+            fi
+            echo "Attempt $i: Waiting for application..."
+            sleep 2
+          done
+          
+          echo "❌ Application did not respond after 60 seconds"
+          exit 1
