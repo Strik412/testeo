@@ -161,17 +161,21 @@ resource "aws_key_pair" "deployer" {
 
 # Launch Template
 resource "aws_launch_template" "app" {
-  name_prefix            = "terraform-asg-"
-  image_id               = data.aws_ami.amazon_linux.id
-  instance_type          = "t3.micro"
-  key_name               = aws_key_pair.deployer.key_name
+  name_prefix   = "terraform-asg-"
+  image_id      = data.aws_ami.amazon_linux.id
+  instance_type = "t3.micro"
+  key_name      = aws_key_pair.deployer.key_name
 
   vpc_security_group_ids = [aws_security_group.instances.id]
 
-  network_interfaces {
-    associate_public_ip_address = true
-    security_groups             = [aws_security_group.instances.id]
-    delete_on_termination       = true
+  metadata_options {
+    http_endpoint               = "enabled"
+    http_tokens                 = "optional"
+    http_put_response_hop_limit = 1
+  }
+
+  monitoring {
+    enabled = false
   }
 
   user_data = base64encode(<<-EOF
@@ -215,6 +219,11 @@ resource "aws_autoscaling_group" "app" {
     version = "$Latest"
   }
 
+  # Asignar IP pública automáticamente
+  lifecycle {
+    create_before_destroy = true
+  }
+
   tag {
     key                 = "Name"
     value               = "terraform-asg-instance"
@@ -229,12 +238,6 @@ data "aws_instances" "asg_instances" {
     values = [aws_autoscaling_group.app.name]
   }
   depends_on = [aws_autoscaling_group.app]
-}
-
-# Data source para obtener detalles de las instancias (incluyendo IPs públicas)
-data "aws_instances" "asg_details" {
-  instance_ids = data.aws_instances.asg_instances.ids
-  depends_on   = [aws_autoscaling_group.app]
 }
 
 # Output
@@ -256,7 +259,7 @@ output "asg_name" {
 
 output "instance_ips" {
   description = "Public IPs of EC2 instances for SSH access"
-  value       = data.aws_instances.asg_details.public_ips
+  value       = data.aws_instances.asg_instances.public_ips
   depends_on  = [aws_autoscaling_group.app]
 }
 
