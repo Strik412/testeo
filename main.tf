@@ -161,12 +161,18 @@ resource "aws_key_pair" "deployer" {
 
 # Launch Template
 resource "aws_launch_template" "app" {
-  name_prefix   = "terraform-asg-"
-  image_id      = data.aws_ami.amazon_linux.id
-  instance_type = "t3.micro"
-  key_name      = aws_key_pair.deployer.key_name
+  name_prefix            = "terraform-asg-"
+  image_id               = data.aws_ami.amazon_linux.id
+  instance_type          = "t3.micro"
+  key_name               = aws_key_pair.deployer.key_name
 
   vpc_security_group_ids = [aws_security_group.instances.id]
+
+  network_interfaces {
+    associate_public_ip_address = true
+    security_groups             = [aws_security_group.instances.id]
+    delete_on_termination       = true
+  }
 
   user_data = base64encode(<<-EOF
               #!/bin/bash
@@ -195,13 +201,14 @@ resource "aws_launch_template" "app" {
 
 # Auto Scaling Group
 resource "aws_autoscaling_group" "app" {
-  name                = "terraform-asg-example"
-  min_size            = 1
-  max_size            = 3
-  desired_capacity    = 2
-  vpc_zone_identifier = data.aws_subnets.default.ids
-  target_group_arns   = [aws_lb_target_group.instances.arn]
-  health_check_type   = "ELB"
+  name                    = "terraform-asg-example"
+  min_size                = 1
+  max_size                = 3
+  desired_capacity        = 2
+  vpc_zone_identifier     = data.aws_subnets.default.ids
+  target_group_arns       = [aws_lb_target_group.instances.arn]
+  health_check_type       = "ELB"
+  health_check_grace_period = 300
 
   launch_template {
     id      = aws_launch_template.app.id
@@ -224,6 +231,12 @@ data "aws_instances" "asg_instances" {
   depends_on = [aws_autoscaling_group.app]
 }
 
+# Data source para obtener detalles de las instancias (incluyendo IPs públicas)
+data "aws_instances" "asg_details" {
+  instance_ids = data.aws_instances.asg_instances.ids
+  depends_on   = [aws_autoscaling_group.app]
+}
+
 # Output
 output "alb_dns_name" {
   description = "DNS name of the load balancer"
@@ -242,8 +255,8 @@ output "asg_name" {
 }
 
 output "instance_ips" {
-  description = "Private IPs of EC2 instances"
-  value       = data.aws_instances.asg_instances.private_ips
+  description = "Public IPs of EC2 instances for SSH access"
+  value       = data.aws_instances.asg_details.public_ips
   depends_on  = [aws_autoscaling_group.app]
 }
 
