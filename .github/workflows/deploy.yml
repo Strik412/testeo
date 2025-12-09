@@ -104,6 +104,9 @@ jobs:
                 sleep 5
               done
               
+              echo 'Stopping Nginx to free port 80...'
+              sudo systemctl stop nginx || true
+              
               echo 'Pulling Docker image: $DOCKER_IMAGE'
               docker pull $DOCKER_IMAGE
               
