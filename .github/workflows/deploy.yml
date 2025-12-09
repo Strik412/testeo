@@ -92,7 +92,7 @@ jobs:
           for instance_ip in "${INSTANCES[@]}"; do
             echo "📦 Deploying to $instance_ip..."
             
-            ssh -i $SSH_KEY -o StrictHostKeyChecking=no -o ConnectTimeout=30 $SSH_USER@$instance_ip << 'EOSSH'
+            ssh -i $SSH_KEY -o StrictHostKeyChecking=no -o ConnectTimeout=30 $SSH_USER@$instance_ip bash << EOF
           # Wait for Docker to be ready (max 2 minutes)
           echo "Waiting for Docker daemon..."
           for i in {1..24}; do
@@ -100,7 +100,7 @@ jobs:
               echo "Docker is ready"
               break
             fi
-            echo "Attempt $i: Waiting..."
+            echo "Attempt \$i: Waiting..."
             sleep 5
           done
           
@@ -114,7 +114,7 @@ jobs:
           docker run -d --name app -p 80:80 $DOCKER_IMAGE
           
           echo "✅ Deployment completed"
-          EOSSH
+          EOF
             
             if [ $? -eq 0 ]; then
               echo "✅ Successfully deployed to $instance_ip"
