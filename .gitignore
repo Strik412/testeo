@@ -12,6 +12,12 @@ override.tf.json
 *_override.tf
 *_override.tf.json
 
+# SSH Keys
+deployer_key.pem
+deployer_key.pub
+*.pem
+*.key
+
 # IDE
 .vscode/
 .idea/
@@ -23,7 +29,7 @@ override.tf.json
 .DS_Store
 Thumbs.db
 
-# Local files
-deployer_key.pem
-deployer_key.pub
-*.pem
+# Documentation (local only)
+GITHUB_ACTIONS_GUIDE.md
+IMPLEMENTATION_SUMMARY.md
+deploy-to-instances.sh
