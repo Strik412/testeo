@@ -267,11 +267,8 @@ resource "aws_autoscaling_policy" "cpu_scaling" {
     predefined_metric_specification {
       predefined_metric_type = "ASGAverageCPUUtilization"
     }
-    target_value       = 70.0
-    disable_scale_in   = false
+    target_value = 70.0
   }
-
-  estimated_warmup_seconds = 300
 }
 
 # Auto Scaling Policy - Memory/Network (high threshold to avoid initial scaling)
@@ -284,11 +281,8 @@ resource "aws_autoscaling_policy" "memory_scaling" {
     predefined_metric_specification {
       predefined_metric_type = "ASGAverageNetworkIn"
     }
-    target_value       = 10000000.0  # 10 MB/s - high threshold
-    disable_scale_in   = false
+    target_value = 10000000.0  # 10 MB/s - high threshold
   }
-
-  estimated_warmup_seconds = 300
 }
 
 # Data source para obtener las instancias del ASG
