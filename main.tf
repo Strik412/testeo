@@ -25,11 +25,16 @@ data "aws_vpc" "default" {
   default = true
 }
 
-# Obtener las subnets por defecto
+# Obtener las subnets por defecto (excluyendo us-east-1e)
 data "aws_subnets" "default" {
   filter {
     name   = "vpc-id"
     values = [data.aws_vpc.default.id]
+  }
+  
+  filter {
+    name   = "availability-zone"
+    values = ["us-east-1a", "us-east-1b", "us-east-1c", "us-east-1d", "us-east-1f"]
   }
 }
 
@@ -136,7 +141,7 @@ resource "aws_lb_target_group" "instances" {
   health_check {
     enabled             = true
     interval            = 30
-    path                = "/"
+    path                = "/health.html"
     timeout             = 5
     healthy_threshold   = 2
     unhealthy_threshold = 2
@@ -194,18 +199,25 @@ resource "aws_launch_template" "app" {
 
   user_data = base64encode(<<-EOF
               #!/bin/bash
+              set -e
               yum update -y
               yum install -y docker git
-              systemctl start docker
-              systemctl enable docker
+              amazon-linux-extras install -y nginx1
+
+              # Enable services
+              systemctl enable --now docker
+              systemctl enable --now nginx
+
+              # Simple health endpoint so ALB health checks pass before deploy
+              echo "ok" > /usr/share/nginx/html/health.html
+              echo "<h1>Placeholder - awaiting GitHub Actions deployment</h1>" > /usr/share/nginx/html/index.html
+
+              # Docker group for ec2-user
               usermod -a -G docker ec2-user
               
               # Crear directorio para la aplicación
               mkdir -p /home/ec2-user/app
               chown ec2-user:ec2-user /home/ec2-user/app
-              
-              # Placeholder - será reemplazado por GitHub Actions
-              echo "Waiting for deployment via GitHub Actions..."
               EOF
   )
 
@@ -245,7 +257,7 @@ resource "aws_autoscaling_group" "app" {
   }
 }
 
-# Auto Scaling Policy - CPU
+# Auto Scaling Policy - CPU (70% threshold)
 resource "aws_autoscaling_policy" "cpu_scaling" {
   name                   = "terraform-asg-cpu-policy"
   policy_type            = "TargetTrackingScaling"
@@ -255,11 +267,14 @@ resource "aws_autoscaling_policy" "cpu_scaling" {
     predefined_metric_specification {
       predefined_metric_type = "ASGAverageCPUUtilization"
     }
-    target_value = 70.0
+    target_value           = 70.0
+    scale_in_cooldown      = 300
+    scale_out_cooldown     = 300
+    disable_scale_in       = false
   }
 }
 
-# Auto Scaling Policy - Memory (usando custom metric)
+# Auto Scaling Policy - Memory/Network (high threshold to avoid initial scaling)
 resource "aws_autoscaling_policy" "memory_scaling" {
   name                   = "terraform-asg-memory-policy"
   policy_type            = "TargetTrackingScaling"
@@ -269,7 +284,10 @@ resource "aws_autoscaling_policy" "memory_scaling" {
     predefined_metric_specification {
       predefined_metric_type = "ASGAverageNetworkIn"
     }
-    target_value = 1000000.0  # 1 MB/s
+    target_value           = 10000000.0  # 10 MB/s - high threshold
+    scale_in_cooldown      = 300
+    scale_out_cooldown     = 300
+    disable_scale_in       = false
   }
 }
 
