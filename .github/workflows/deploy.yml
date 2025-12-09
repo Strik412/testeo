@@ -86,35 +86,35 @@ jobs:
           SSH_USER: ec2-user
           INSTANCE_IPS: ${{ secrets.INSTANCE_IPS }}
         run: |
+          set -x
           echo "🚀 Deploying $DOCKER_IMAGE to instances"
+          echo "Instances: [$INSTANCE_IPS]"
           
-          IFS=' ' read -ra INSTANCES <<< "$INSTANCE_IPS"
-          for instance_ip in "${INSTANCES[@]}"; do
+          for instance_ip in $INSTANCE_IPS; do
             echo "📦 Deploying to $instance_ip..."
             
-            ssh -i $SSH_KEY -o StrictHostKeyChecking=no -o ConnectTimeout=30 $SSH_USER@$instance_ip bash << EOF
-          # Wait for Docker to be ready (max 2 minutes)
-          echo "Waiting for Docker daemon..."
-          for i in {1..24}; do
-            if docker --version &> /dev/null; then
-              echo "Docker is ready"
-              break
-            fi
-            echo "Attempt \$i: Waiting..."
-            sleep 5
-          done
-          
-          echo "Pulling Docker image..."
-          docker pull $DOCKER_IMAGE
-          
-          echo "Stopping old container..."
-          docker rm -f app || true
-          
-          echo "Starting new container..."
-          docker run -d --name app -p 80:80 $DOCKER_IMAGE
-          
-          echo "✅ Deployment completed"
-          EOF
+            ssh -v -i $SSH_KEY -o StrictHostKeyChecking=no -o ConnectTimeout=30 $SSH_USER@$instance_ip "
+              echo 'Waiting for Docker daemon...'
+              for i in {1..24}; do
+                if docker --version &> /dev/null; then
+                  echo 'Docker is ready'
+                  break
+                fi
+                echo \"Attempt \$i: Waiting...\"
+                sleep 5
+              done
+              
+              echo 'Pulling Docker image: $DOCKER_IMAGE'
+              docker pull $DOCKER_IMAGE
+              
+              echo 'Stopping old container...'
+              docker rm -f app || true
+              
+              echo 'Starting new container...'
+              docker run -d --name app -p 80:80 $DOCKER_IMAGE
+              
+              echo '✅ Deployment completed'
+            "
             
             if [ $? -eq 0 ]; then
               echo "✅ Successfully deployed to $instance_ip"
