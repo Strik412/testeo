@@ -141,7 +141,7 @@ resource "aws_lb_target_group" "instances" {
   health_check {
     enabled             = true
     interval            = 30
-    path                = "/health.html"
+    path                = "/"
     timeout             = 5
     healthy_threshold   = 2
     unhealthy_threshold = 2
@@ -202,15 +202,9 @@ resource "aws_launch_template" "app" {
               set -e
               yum update -y
               yum install -y docker git
-              amazon-linux-extras install -y nginx1
 
-              # Enable services
+              # Enable docker service
               systemctl enable --now docker
-              systemctl enable --now nginx
-
-              # Simple health endpoint so ALB health checks pass before deploy
-              echo "ok" > /usr/share/nginx/html/health.html
-              echo "<h1>Placeholder - awaiting GitHub Actions deployment</h1>" > /usr/share/nginx/html/index.html
 
               # Docker group for ec2-user
               usermod -a -G docker ec2-user
@@ -268,20 +262,6 @@ resource "aws_autoscaling_policy" "cpu_scaling" {
       predefined_metric_type = "ASGAverageCPUUtilization"
     }
     target_value = 70.0
-  }
-}
-
-# Auto Scaling Policy - Memory/Network (high threshold to avoid initial scaling)
-resource "aws_autoscaling_policy" "memory_scaling" {
-  name                   = "terraform-asg-memory-policy"
-  policy_type            = "TargetTrackingScaling"
-  autoscaling_group_name = aws_autoscaling_group.app.name
-
-  target_tracking_configuration {
-    predefined_metric_specification {
-      predefined_metric_type = "ASGAverageNetworkIn"
-    }
-    target_value = 10000000.0  # 10 MB/s - high threshold
   }
 }
 

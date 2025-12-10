@@ -96,7 +96,7 @@ jobs:
             ssh -v -i $SSH_KEY -o StrictHostKeyChecking=no -o ConnectTimeout=30 $SSH_USER@$instance_ip "
               echo 'Waiting for Docker daemon...'
               for i in {1..24}; do
-                if docker --version &> /dev/null; then
+                if sudo docker --version &> /dev/null; then
                   echo 'Docker is ready'
                   break
                 fi
@@ -104,17 +104,14 @@ jobs:
                 sleep 5
               done
               
-              echo 'Stopping Nginx to free port 80...'
-              sudo systemctl stop nginx || true
-              
               echo 'Pulling Docker image: $DOCKER_IMAGE'
-              docker pull $DOCKER_IMAGE
+              sudo docker pull $DOCKER_IMAGE
               
               echo 'Stopping old container...'
-              docker rm -f app || true
+              sudo docker rm -f app || true
               
               echo 'Starting new container...'
-              docker run -d --name app -p 80:80 $DOCKER_IMAGE
+              sudo docker run -d --name app -p 80:80 $DOCKER_IMAGE
               
               echo '✅ Deployment completed'
             "
