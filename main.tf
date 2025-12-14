@@ -275,7 +275,7 @@ resource "aws_autoscaling_policy" "network_out_scaling" {
     predefined_metric_specification {
       predefined_metric_type = "ASGAverageNetworkOut"
     }
-    target_value = 30000000.0
+    target_value = 50000000.0
   }
 }
 
