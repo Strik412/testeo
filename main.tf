@@ -265,6 +265,20 @@ resource "aws_autoscaling_policy" "cpu_scaling" {
   }
 }
 
+
+resource "aws_autoscaling_policy" "network_out_scaling" {
+  name                   = "terraform-asg-networkout-policy"
+  policy_type            = "TargetTrackingScaling"
+  autoscaling_group_name = aws_autoscaling_group.app.name
+
+  target_tracking_configuration {
+    predefined_metric_specification {
+      predefined_metric_type = "ASGAverageNetworkOut"
+    }
+    target_value = 30000000.0
+  }
+}
+
 # Data source para obtener las instancias del ASG
 data "aws_instances" "asg_instances" {
   filter {
